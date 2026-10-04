@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iniciar sesión · FutbolYa</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@700&display=swap">
+<link rel="icon" href="favicon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="auth">
+  <form class="cancha" id="f" novalidate>
+    <h1 class="marca"><img src="logo.png" alt="FutbolYa"></h1>
+    <p class="sub">Iniciá sesión para ver los partidos.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="email" required>
+    <label for="password">Contraseña</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <p class="error" id="err" role="alert"></p>
+    <button class="full" type="submit">Iniciar sesión</button>
+    <p class="sub">¿Todavía no tenés cuenta? <a href="registro.html">Registrate</a></p>
+  </form>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supa.js"></script>
+<script>
+sb.auth.getSession().then(({ data }) => { if (data.session) location.href = 'partidos.html'; });
+document.getElementById('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const err = document.getElementById('err'); err.textContent = '';
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: password.value });
+    if (error) throw new Error(traducir(error.message));
+    location.href = 'partidos.html';
+  } catch (ex) { err.textContent = ex.message; }
+});
+</script>
+</body>
+</html>

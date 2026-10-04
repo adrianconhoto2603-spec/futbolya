@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FutbolYa · Partidos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@700&display=swap">
+<link rel="icon" href="favicon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="barra">
+  <h1 class="marca"><img src="logo.png" alt="FutbolYa"></h1>
+  <div><span id="quien" class="sub"></span> <button class="sec" id="salir">Cerrar sesión</button></div>
+</header>
+<main>
+  <form class="crear" id="crear" novalidate>
+    <h2>Crear partido</h2>
+    <div><label for="titulo">Título</label><input id="titulo" maxlength="60" placeholder="Fútbol de los jueves" required></div>
+    <div><label for="lugar">Lugar</label><input id="lugar" maxlength="80" placeholder="Cancha de Palermo" required></div>
+    <div><label for="fecha">Fecha y hora</label><input id="fecha" type="datetime-local" required></div>
+    <div><label for="max">Cantidad de jugadores</label>
+      <select id="max">
+        <option value="10">10 (5 vs 5)</option>
+        <option value="12">12 (6 vs 6)</option>
+        <option value="14">14 (7 vs 7)</option>
+        <option value="16">16 (8 vs 8)</option>
+        <option value="18">18 (9 vs 9)</option>
+        <option value="22">22 (11 vs 11)</option>
+      </select></div>
+    <div><label for="arq">¿Falta arquero?</label>
+      <select id="arq">
+        <option value="0">No, ya tenemos</option>
+        <option value="1">Falta 1 arquero</option>
+        <option value="2">Faltan 2 arqueros</option>
+      </select></div>
+    <p class="error" id="errCrear" role="alert"></p>
+    <button type="submit">Crear partido</button>
+  </form>
+
+  <section>
+    <h2>Próximos partidos</h2>
+    <label class="filtro"><input type="checkbox" id="soloArquero"> Mostrar solo partidos donde falta arquero</label>
+    <p class="error" id="errLista" role="alert"></p>
+    <div class="lista" id="lista"></div>
+  </section>
+</main>
+
+<dialog id="detalle">
+  <h3 id="dTitulo"></h3>
+  <p class="sub" id="dInfo"></p>
+  <p><strong id="dCupo"></strong></p>
+  <ol id="dJugadores"></ol>
+  <p class="error" id="errDetalle" role="alert"></p>
+  <div class="acciones" id="dAcciones"></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supa.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+const fmt = iso => new Date(iso).toLocaleString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+const faltanArqueros = p => p.cancelado ? 0 : Math.max(0, p.arqueros_buscados - p.arqueros_anotados);
+
+const ahora = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+$('fecha').min = ahora.toISOString().slice(0, 16);
+
+sb.auth.getSession().then(({ data }) => {
+  if (!data.session) location.href = 'index.html';
+  else $('quien').textContent = data.session.user.email;
+});
+$('salir').onclick = async () => { await sb.auth.signOut(); location.href = 'index.html'; };
+$('soloArquero').onchange = cargar;
+
+$('crear').addEventListener('submit', async e => {
+  e.preventDefault(); $('errCrear').textContent = '';
+  try {
+    await rpc('crear_partido', {
+      p_titulo: $('titulo').value, p_lugar: $('lugar').value,
+      p_fecha: $('fecha').value ? new Date($('fecha').value).toISOString() : null,
+      p_max: Number($('max').value), p_arq: Number($('arq').value)
+    });
+    e.target.reset(); cargar();
+  } catch (ex) { $('errCrear').textContent = ex.message; }
+});
+
+async function cambiar(p, anotado, comoArquero, errEl) {
+  errEl.textContent = '';
+  try {
+    if (anotado) await rpc('salir_partido', { p_id: p.id });
+    else await rpc('unirse_partido', { p_id: p.id, p_arquero: comoArquero });
+    await cargar();
+    if ($('detalle').open) abrirDetalle(p.id);
+  } catch (ex) { errEl.textContent = ex.message; }
+}
+
+// Botones para unirse, salir o cancelar; sirve para la tarjeta y para el detalle
+function botones(p, errEl) {
+  if (p.cancelado) return [];
+  const res = [];
+  if (p.yo_anotado) {
+    const b = el('button', { className: 'sec', textContent: 'Salir del partido' });
+    b.onclick = () => cambiar(p, true, false, errEl);
+    res.push(b);
+  } else {
+    const completo = p.anotados >= p.max_jugadores;
+    const soloArqueros = p.anotados + faltanArqueros(p) >= p.max_jugadores;
+    const campo = el('button', { textContent: completo ? 'Completo' : 'Unirme', disabled: completo || soloArqueros });
+    campo.onclick = () => cambiar(p, false, false, errEl);
+    res.push(campo);
+    if (!completo && faltanArqueros(p) > 0) {
+      const arq = el('button', { textContent: 'Unirme como arquero' });
+      arq.onclick = () => cambiar(p, false, true, errEl);
+      res.push(arq);
+    }
+  }
+  if (p.soy_organizador) {
+    const c = el('button', { className: 'sec', textContent: 'Cancelar partido' });
+    c.onclick = async () => {
+      if (!confirm('¿Cancelar "' + p.titulo + '"? Los jugadores anotados van a ver que quedó cancelado.')) return;
+      errEl.textContent = '';
+      try {
+        await rpc('cancelar_partido', { p_id: p.id });
+        if ($('detalle').open) $('detalle').close();
+        cargar();
+      } catch (ex) { errEl.textContent = ex.message; }
+    };
+    res.push(c);
+  }
+  return res;
+}
+
+async function cargar() {
+  $('errLista').textContent = '';
+  try {
+    let partidos = await rpc('listar_partidos');
+    if ($('soloArquero').checked) partidos = partidos.filter(p => faltanArqueros(p) > 0);
+    const lista = $('lista'); lista.replaceChildren();
+    if (!partidos.length) lista.append(el('p', { className: 'vacio', textContent: $('soloArquero').checked ? 'No hay partidos que busquen arquero por ahora.' : 'Todavía no hay partidos. Creá el primero con el formulario de arriba.' }));
+    for (const p of partidos) {
+      const lleno = p.anotados >= p.max_jugadores;
+      const falta = faltanArqueros(p);
+      const btnInfo = el('button', { className: 'sec', textContent: 'Más información' });
+      btnInfo.onclick = () => abrirDetalle(p.id);
+      lista.append(el('article', { className: 'partido' + (p.cancelado ? ' cancelado' : '') },
+        el('h3', { textContent: p.titulo }),
+        p.cancelado ? el('span', { className: 'etiqueta cancelada', textContent: 'Cancelado' }) : falta ? el('span', { className: 'etiqueta', textContent: falta === 1 ? 'Falta 1 arquero' : 'Faltan ' + falta + ' arqueros' }) : '',
+        el('div', { textContent: fmt(p.fecha_hora) }),
+        el('div', { className: 'sub', textContent: p.lugar }),
+        el('div', { className: 'cupo' + (lleno ? ' lleno' : ''), textContent: p.anotados + ' / ' + p.max_jugadores + ' jugadores' }),
+        el('div', { className: 'acciones' }, ...botones(p, $('errLista')), btnInfo)));
+    }
+  } catch (ex) { $('errLista').textContent = ex.message; }
+}
+
+async function abrirDetalle(id) {
+  $('errDetalle').textContent = '';
+  try {
+    const p = await rpc('detalle_partido', { p_id: id });
+    $('dTitulo').textContent = p.titulo;
+    $('dInfo').textContent = fmt(p.fecha_hora) + ' · ' + p.lugar;
+    const falta = faltanArqueros(p);
+    $('dCupo').textContent = p.cancelado ? 'Partido cancelado por el organizador' : p.anotados + ' de ' + p.max_jugadores + ' jugadores anotados' +
+      (falta ? ' · falta ' + (falta === 1 ? '1 arquero' : falta + ' arqueros') : '');
+    $('dJugadores').replaceChildren(...p.jugadores.map(j => el('li', {},
+      j.nombre,
+      j.es_arquero ? el('span', { className: 'org', textContent: ' (arquero)' }) : '',
+      j.es_organizador ? el('span', { className: 'org', textContent: ' (organizador)' }) : '',
+      j.telefono ? ' · ' + j.telefono : '')));
+    $('dAcciones').replaceChildren(...botones(p, $('errDetalle')),
+      Object.assign(el('button', { className: 'sec', textContent: 'Cerrar' }), { onclick: () => $('detalle').close() }));
+    if (!$('detalle').open) $('detalle').showModal();
+  } catch (ex) { $('errLista').textContent = ex.message; }
+}
+
+cargar();
+</script>
+</body>
+</html>

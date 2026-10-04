@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crear cuenta · FutbolYa</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@700&display=swap">
+<link rel="icon" href="favicon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="auth">
+  <form class="cancha" id="f" novalidate>
+    <h1 class="marca"><img src="logo.png" alt="FutbolYa"></h1>
+    <p class="sub">Creá tu cuenta para organizar partidos y anotarte a los de otros.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="email" required>
+    <label for="password">Contraseña (mínimo 8 caracteres)</label>
+    <input id="password" type="password" autocomplete="new-password" minlength="8" required>
+    <label for="telefono">Teléfono</label>
+    <input id="telefono" type="tel" autocomplete="tel" placeholder="+54 11 1234 5678" required>
+    <p class="error" id="err" role="alert"></p>
+    <button class="full" type="submit">Crear cuenta</button>
+    <p class="sub">¿Ya tenés cuenta? <a href="index.html">Iniciá sesión</a></p>
+  </form>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supa.js"></script>
+<script>
+document.getElementById('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const err = document.getElementById('err'); err.textContent = '';
+  const mail = email.value.trim(), tel = telefono.value.trim();
+  try {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) throw new Error('Ingresá un email válido.');
+    if (password.value.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
+    if (!/^\+?[\d -]{8,18}$/.test(tel)) throw new Error('Ingresá un teléfono válido (solo números, espacios o guiones).');
+    const { data, error } = await sb.auth.signUp({ email: mail, password: password.value, options: { data: { telefono: tel } } });
+    if (error) throw new Error(traducir(error.message));
+    if (data.session) location.href = 'partidos.html';
+    else err.textContent = 'Te enviamos un email para confirmar tu cuenta. Confirmalo y después iniciá sesión.';
+  } catch (ex) { err.textContent = ex.message; }
+});
+</script>
+</body>
+</html>

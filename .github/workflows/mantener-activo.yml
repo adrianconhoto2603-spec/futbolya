@@ -1,0 +1,15 @@
+name: Mantener Supabase activo
+on:
+  schedule:
+    - cron: '17 9 */3 * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Llamar a la base de datos
+        run: |
+          URL=$(grep -oP "SUPABASE_URL\s*=\s*'\K[^']+" config.js)
+          KEY=$(grep -oP "SUPABASE_ANON_KEY\s*=\s*'\K[^']+" config.js)
+          curl -sS --fail -X POST "$URL/rest/v1/rpc/ping" -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'

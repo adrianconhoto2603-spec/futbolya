@@ -17,7 +17,7 @@
     <input id="email" type="email" autocomplete="email" required>
     <label for="password">Contraseña (mínimo 8 caracteres)</label>
     <input id="password" type="password" autocomplete="new-password" minlength="8" required>
-    <label for="telefono">Teléfono</label>
+    <label for="telefono">Celular (con código de área)</label>
     <input id="telefono" type="tel" autocomplete="tel" placeholder="+54 11 1234 5678" required>
     <p class="error" id="err" role="alert"></p>
     <button class="full" type="submit">Crear cuenta</button>
@@ -28,14 +28,45 @@
 <script src="config.js"></script>
 <script src="supa.js"></script>
 <script>
+const ERRORES_COMUNES = {
+  'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gmil.com': 'gmail.com',
+  'gmail.con': 'gmail.com', 'gmail.co': 'gmail.com',
+  'hotmial.com': 'hotmail.com', 'hotmal.com': 'hotmail.com', 'hotmail.con': 'hotmail.com',
+  'outlok.com': 'outlook.com', 'outlook.con': 'outlook.com',
+  'yahooo.com': 'yahoo.com', 'yaho.com': 'yahoo.com', 'yahoo.con': 'yahoo.com'
+};
+
+function errorEmail(mail) {
+  const formato = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+  if (!formato.test(mail) || mail.includes('..') || mail.startsWith('.') || mail.includes('.@'))
+    return 'Ingresá un email válido, por ejemplo nombre@gmail.com.';
+  const dominio = mail.split('@')[1].toLowerCase();
+  if (ERRORES_COMUNES[dominio]) return '¿Quisiste escribir ' + mail.split('@')[0] + '@' + ERRORES_COMUNES[dominio] + '?';
+  return '';
+}
+
+function errorTelefono(tel) {
+  if (!/^\+?[\d -]{8,18}$/.test(tel))
+    return 'Ingresá un celular válido (solo números, espacios o guiones).';
+  const d = tel.replace(/\D/g, '');
+  if (d.length < 10 || d.length > 15)
+    return 'El celular debe tener entre 10 y 15 dígitos, con el código de área. Ejemplo: +54 11 1234 5678.';
+  if (new Set(d).size < 4 || /(\d)\1{5,}/.test(d) ||
+      /(0123456|1234567|2345678|3456789|4567890|9876543|8765432|7654321|6543210|0987654)/.test(d))
+    return 'Ese celular no parece real. Ingresá tu número verdadero.';
+  return '';
+}
+
 document.getElementById('f').addEventListener('submit', async e => {
   e.preventDefault();
   const err = document.getElementById('err'); err.textContent = '';
   const mail = email.value.trim(), tel = telefono.value.trim();
   try {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) throw new Error('Ingresá un email válido.');
+    const eMail = errorEmail(mail);
+    if (eMail) throw new Error(eMail);
     if (password.value.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
-    if (!/^\+?[\d -]{8,18}$/.test(tel)) throw new Error('Ingresá un teléfono válido (solo números, espacios o guiones).');
+    const eTel = errorTelefono(tel);
+    if (eTel) throw new Error(eTel);
     const { data, error } = await sb.auth.signUp({ email: mail, password: password.value, options: { data: { telefono: tel } } });
     if (error) throw new Error(traducir(error.message));
     if (data.session) location.href = 'partidos.html';

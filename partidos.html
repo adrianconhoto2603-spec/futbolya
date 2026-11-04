@@ -119,7 +119,7 @@ function botones(p, errEl) {
   if (p.soy_organizador) {
     const c = el('button', { className: 'sec', textContent: 'Cancelar partido' });
     c.onclick = async () => {
-      if (!confirm('¿Cancelar "' + p.titulo + '"? Los jugadores anotados van a ver que quedó cancelado.')) return;
+      if (!confirm('¿Cancelar "' + p.titulo + '"? El partido va a desaparecer de la lista.')) return;
       errEl.textContent = '';
       try {
         await rpc('cancelar_partido', { p_id: p.id });
@@ -177,5 +177,6 @@ async function abrirDetalle(id) {
 
 cargar();
 </script>
+<script src="chat.js"></script>
 </body>
 </html>
